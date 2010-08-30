@@ -105,6 +105,36 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
     }
 
     /**
+     * Add or update an event.
+     */
+    public static function __saveEvent($id, $title, $place, $notes,
+            $startDatetime, $endDatetime, $status, $visibility, $participantId)
+    {
+        assert(empty($id)) or die; // We can't handle updates yet
+
+        $event = new Calendar_Models_Calendar();
+        $event->parentId      = null;
+        $event->projectId = 1;
+        $event->ownerId       = Phprojekt_Auth::getUserId();
+        $event->title         = $title;
+        $event->place         = $place;
+        $event->notes         = $notes;
+        $event->startDatetime = $startDatetime->format('Y-m-d H:m:s');
+        $event->endDatetime   = $endDatetime->format('Y-m-d H:m:s');
+        $event->status        = $status;
+        $event->rrule         = '';
+        $event->visibility    = $visibility;
+        $event->participantId = Phprojekt_Auth::getUserId();
+
+        $event->save();
+        $event->saveRights(
+            array(Phprojekt_Auth::getUserId() => Phprojekt_Acl::ALL)
+        );
+
+        return $event->id;
+    }
+
+    /**
      * Save or inserts an event. It inserts one envent by participant.
      *
      * @param array   $request              Array with all the data for the item (Basic Data).
@@ -670,18 +700,29 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
      *
      * @return integer The parentId.
      */
-    private function _saveEvent($request, $model, $oneDate, $daysDuration, $participantId, $parentId)
+    private function _saveEvent($request, $model, $startDatetime, $endDatetime, $participantId, $parentId)
     {
-        $request['startDatetime'] = date("Y-m-d", $oneDate) . ' ' . $request['startTime'];
-        $request['endDatetime']   = date("Y-m-d", $oneDate + ($daysDuration * 24 * 60 * 60)) . ' '
-            . $request['endTime'];
-        $request['participantId'] = $participantId;
-        $request['parentId']      = $parentId;
+        $values = array(
+            'id'             => $request['id'],
+            'parentId'       => $parentId,
+            'ownerId'        => $request['ownerId'],
+            'title'          => $request['title'],
+            'place'          => $request['place'],
+            'notes'          => $request['notes'],
+            'startDatetime'  => '2010-10-10 10:10:10', //$startDatetime->format('Y-m-d H:i:s'),
+            'endDatetime'    => '2010-10-10 10:10:13', //$endDatetime->format('Y-m-d H:i:s'),
+            'status'         => $request['status'],
+            'rrule'          => $request['rrule'],
+            'visibility'     => $request['visibility'],
+            'participantId'  => $participantId
+        );
+        Phprojekt::getInstance()->getLog()->debug(print_r($values, true));
+        Phprojekt::getInstance()->getLog()->debug(print_r($model, true));
 
         // The save is needed?
-        if ($this->_needSave($model, $request)) {
+        if ($this->_needSave($model, $values)) {
             // Add 'read, write, downlaod and delete' access to the participant
-            $request = Default_Helpers_Right::allowReadWriteDownloadDelete($request, $participantId);
+            $values = Default_Helpers_Right::allowReadWriteDownloadDelete($values, $participantId);
 
             // Access for the owner
             if (null !== $model->ownerId) {
@@ -692,12 +733,12 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
 
             // Set the status to "Pending" if there is any change and the event is for other user
             if ($participantId != $ownerId && $participantId != Phprojekt_Auth::getUserId()) {
-                $request['status'] = self::EVENT_STATUS_PENDING;
+                $values['status'] = self::EVENT_STATUS_PENDING;
             }
 
-            $request = Default_Helpers_Right::allowAll($request, $ownerId);
+            $values = Default_Helpers_Right::allowAll($values, $ownerId);
 
-            Default_Helpers_Save::save($model, $request);
+            Default_Helpers_Save::save($model, $values);
         }
 
         if (null === $parentId) {
@@ -715,11 +756,11 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
      *
      * @return boolean True if there is any change.
      */
-    private function _needSave($model, $request)
+    private function _needSave($model, $values)
     {
         $save = false;
 
-        foreach ($request as $k => $v) {
+        foreach ($values as $k => $v) {
             if (isset($model->$k)) {
                 if ($model->$k != $v && $k != 'id' && $k != 'rrule') {
                     $save = true;
