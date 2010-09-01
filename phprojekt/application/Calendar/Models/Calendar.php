@@ -107,71 +107,97 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
     /**
      * Add or update an event.
      */
-    public static function __saveEvent($id, $title, $place, $notes,
-            $startDatetime, $endDatetime, $status, $visibility, $participants)
+    public static function __saveEvent($id, $rrule, $participants, $values)
     {
-        //TODO: Set the status to "Pending" if there is any change and the
-        //      event is for other user
-        assert(empty($id)) or die; // We can't handle updates yet
+        if (empty($id)) {
+            return self::___newEvent($rrule, $participants, $values);
+        } else {
+            throw new Exception('Not implemented yet');
+        }
+    }
 
-        // Configure data that is the same for all participants
-        $commonValues = array(
-            'parentId'  = null, // This is only here until we know it
-            'projectId' = 1,
-            'title'     = $title,
-            'place'     = $place,
-            'notes'     = $notes,
-            'start'     = $startDatetime,
-            'end'       = $endDatetime,
-            'status'    = $status,
-            'rrule'     = '', //TODO: Make rrules work
-            'visibility' = $visibility,
-        );
-
-        // Save the parent event to get it's id
-        $parentId = self::_addSingleNewEvent(
+    protected static function ___newEvent($rrule, $participants, $values)
+    {
+        $values['projectId'] = 1;
+        $values['parentId']  = null;
+        $values['parentId']  = self::___newSingleEventForSingleParticipant(
             Phprojekt_Auth::getUserId(),
-            $commonValues
+            $values
         );
 
-        $commonValues['parentId'] = $parentId;
+        if (!empty($rrule)) {
+            // Assign the other participants to the first event
+            foreach ($participants as $participant) {
+                self::___newSingleEventForSingleParticipant($participant, $values);
+            }
+            array_unshift($participants, Phprojekt_Auth::getUserId());
 
-        // Now save all other participants objects
+            // Get the remaining dates
+            $dateCollection = new Phprojekt_Date_Collection($values['startDatetime']);
+            $dateCollection->applyRrule($rrule);
+            $dates = $dateCollection->getValues();
+            var_dump($dates);
+            return 0;
+            array_shift($dates);
+
+            $duration = $values['startDatetime']->diff($values['endDatetime']);
+            foreach ($dates as $start) {
+                // Create start and end Date
+                $values['startDatetime'] = new Datetime('@' . $start);
+                $values['endDatetime']   = new Datetime('@' . $start);
+                $values['endDatetime']->add($duration);
+                self::___newSingleEvent($participants, $values);
+            }
+        }
+
+        return $values['parentId'];
+    }
+
+    protected static function ___newSingleEvent($participants, $values)
+    {
         foreach ($participants as $participant) {
-            self::_addSingleNewEvent($participant, $commonValues);
+            self::___newSingleEventForSingleParticipant($participant, $values);
         }
 
         return $parentId;
     }
 
-    protected static function _addSingleNewEvent($participantId, $commonValues)
+    protected static function ___newSingleEventForSingleParticipant(
+            $participantId, $values)
     {
         $model = new Calendar_Models_Calendar();
-        $model->parentId      = $commonValues['parentId'];
+        $model->parentId      = $values['parentId'];
         $model->projectId     = 1;
         $model->ownerId       = Phprojekt_Auth::getUserId();
-        $model->title         = $commonValues['title'];
-        $model->place         = $commonValues['place'];
-        $model->notes         = $commonValues['notes'];
-        $model->startDatetime = $commonValues['startDatetime']->format('Y-m-d H:m:s');
-        $model->endDatetime   = $commonValues['endDatetime']->format('Y-m-d H:m:s');
-        $model->status        = $commonValues['status'];
-        $model->rrule         = '';
-        $model->visibility    = $commonValues['visibility'];
+        $model->title         = $values['title'];
+        $model->place         = $values['place'];
+        $model->notes         = $values['notes'];
+        $model->startDatetime = $values['startDatetime']->format('Y-m-d H:m:s');
+        $model->endDatetime   = $values['endDatetime']->format('Y-m-d H:m:s');
+        $model->status        = $values['status'];
+        $model->rrule         = $values['rrule'];
+        $model->visibility    = $values['visibility'];
         $model->participantId = $participantId;
-        $model->save();
 
         $rights = array(Phprojekt_Auth::getUserId() => Phprojekt_Acl::ALL);
         if (Phprojekt_Auth::getUserId() !== $participantId) {
-            $rights[$values['participantId']] = Phprojekt_Acl::convertArrayToBitmask(
+            // Set the status to pending and add rights for the participant
+            $model->status = self::EVENT_STATUS_PENDING;
+            $rights[$participantId] = Phprojekt_Acl::convertArrayToBitmask(
                     array(
-                        'read' => true,
-                        'write' => true,
+                        'read'     => true,
+                        'write'    => true,
                         'download' => true,
-                        'delete' => true
+                        'delete'   => true,
+                        'access'   => false,
+                        'create'   => false,
+                        'copy'     => false,
+                        'admin'    => false
                     )
             );
         }
+
+        $model->save();
         $model->saveRights($rights);
 
         return $model->id;
@@ -822,7 +848,7 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
      *
      * @return boolean True for a valid string.
      */
-    private function _validateRecurrence($rrule)
+    private static function _validateRecurrence($rrule)
     {
         $valid = true;
 

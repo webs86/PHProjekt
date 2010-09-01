@@ -225,16 +225,22 @@ class Calendar_IndexController extends IndexController
 
         $this->setCurrentProjectId();
 
+        $values = array(
+            'title' => $this->getRequest()->getParam('title'),
+            'place' => $this->getRequest()->getParam('place'),
+            'notes' => $this->getRequest()->getParam('notes'),
+            'rrule' => $this->getRequest()->getParam('rrule', ''),
+            'startDatetime' => new DateTime($start),
+            'endDatetime' => new DateTime($end),
+            'status' => $this->getRequest()->getParam('status'),
+            'visibility' => $this->getRequest()->getParam('visibility'),
+        );
+
         $id = Calendar_Models_Calendar::__saveEvent(
             (int) $this->getRequest()->getParam('id'),
-            $this->getRequest()->getParam('title'),
-            $this->getRequest()->getParam('place'),
-            $this->getRequest()->getParam('notes'),
-            new DateTime($start),
-            new DateTime($end),
-            $this->getRequest()->getParam('status'),
-            $this->getRequest()->getParam('visibility'),
-            (array) $this->getRequest()->getParam('dataParticipant', array())
+            $values['rrule'],
+            (array) $this->getRequest()->getParam('dataParticipant', array()),
+            $values
         );
 
         $return = array('type'    => 'success',
