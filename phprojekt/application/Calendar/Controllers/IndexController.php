@@ -234,7 +234,7 @@ class Calendar_IndexController extends IndexController
             new DateTime($end),
             $this->getRequest()->getParam('status'),
             $this->getRequest()->getParam('visibility'),
-            $this->getRequest()->getParam('participantId')
+            (array) $this->getRequest()->getParam('dataParticipant', array())
         );
 
         $return = array('type'    => 'success',
