@@ -110,64 +110,69 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
     public static function __saveEvent($id, $title, $place, $notes,
             $startDatetime, $endDatetime, $status, $visibility, $participants)
     {
-        //TODO: Set the status to "Pending" if there is any change and the event is for other user
+        //TODO: Set the status to "Pending" if there is any change and the
+        //      event is for other user
         assert(empty($id)) or die; // We can't handle updates yet
 
         // Configure data that is the same for all participants
-        $model = new Calendar_Models_Calendar();
-        $model->parentId      = null;
-        $model->projectId     = 1;
-        $model->ownerId       = Phprojekt_Auth::getUserId();
-        $model->title         = $title;
-        $model->place         = $place;
-        $model->notes         = $notes;
-        $model->startDatetime = $startDatetime->format('Y-m-d H:m:s');
-        $model->endDatetime   = $endDatetime->format('Y-m-d H:m:s');
-        $model->status        = $status;
-        $model->rrule         = ''; //TODO: Make rrules work
-        $model->visibility    = $visibility;
-        $model->participantId = Phprojekt_Auth::getUserId();
-
-        // Save the owner's object
-        $model->save();
-        $model->saveRights(
-            array(Phprojekt_Auth::getUserId() => Phprojekt_Acl::ALL)
+        $commonValues = array(
+            'parentId'  = null, // This is only here until we know it
+            'projectId' = 1,
+            'title'     = $title,
+            'place'     = $place,
+            'notes'     = $notes,
+            'start'     = $startDatetime,
+            'end'       = $endDatetime,
+            'status'    = $status,
+            'rrule'     = '', //TODO: Make rrules work
+            'visibility' = $visibility,
         );
 
-        $parentId = $model->id;
+        // Save the parent event to get it's id
+        $parentId = self::_addSingleNewEvent(
+            Phprojekt_Auth::getUserId(),
+            $commonValues
+        );
+
+        $commonValues['parentId'] = $parentId;
 
         // Now save all other participants objects
         foreach ($participants as $participant) {
-            //TODO: This is a totally ugly C&P from above, should better be
-            //      solved with something like clone, just preserving values.
-            $model = new Calendar_Models_Calendar();
-            $model->parentId      = $parentId;
-            $model->projectId     = 1;
-            $model->ownerId       = Phprojekt_Auth::getUserId();
-            $model->title         = $title;
-            $model->place         = $place;
-            $model->notes         = $notes;
-            $model->startDatetime = $startDatetime->format('Y-m-d H:m:s');
-            $model->endDatetime   = $endDatetime->format('Y-m-d H:m:s');
-            $model->status        = $status;
-            $model->rrule         = '';
-            $model->visibility    = $visibility;
-            $model->participantId = $participant;
-            $model->save();
+            self::_addSingleNewEvent($participant, $commonValues);
+        }
 
-            $rights = array(
-                Phprojekt_Auth::getUserId() => Phprojekt_Acl::ALL,
-                $participant => Phprojekt_Acl::convertArrayToBitmask(
+        return $parentId;
+    }
+
+    protected static function _addSingleNewEvent($participantId, $commonValues)
+    {
+        $model = new Calendar_Models_Calendar();
+        $model->parentId      = $commonValues['parentId'];
+        $model->projectId     = 1;
+        $model->ownerId       = Phprojekt_Auth::getUserId();
+        $model->title         = $commonValues['title'];
+        $model->place         = $commonValues['place'];
+        $model->notes         = $commonValues['notes'];
+        $model->startDatetime = $commonValues['startDatetime']->format('Y-m-d H:m:s');
+        $model->endDatetime   = $commonValues['endDatetime']->format('Y-m-d H:m:s');
+        $model->status        = $commonValues['status'];
+        $model->rrule         = '';
+        $model->visibility    = $commonValues['visibility'];
+        $model->participantId = $participantId;
+        $model->save();
+
+        $rights = array(Phprojekt_Auth::getUserId() => Phprojekt_Acl::ALL);
+        if (Phprojekt_Auth::getUserId() !== $participantId) {
+            $rights[$values['participantId']] = Phprojekt_Acl::convertArrayToBitmask(
                     array(
                         'read' => true,
                         'write' => true,
                         'download' => true,
                         'delete' => true
                     )
-                )
             );
-            $model->saveRights($rights);
         }
+        $model->saveRights($rights);
 
         return $model->id;
     }
