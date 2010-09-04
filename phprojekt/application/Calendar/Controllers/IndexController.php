@@ -217,17 +217,6 @@ class Calendar_IndexController extends IndexController
      */
     public function jsonSaveAction()
     {
-        $message       = Phprojekt::getInstance()->translate(self::ADD_TRUE_TEXT);
-
-        $startDateTime = new DateTime(Cleaner::sanitize(
-            'datetime',
-            $this->getRequest()->getParam('startDatetime')
-        ));
-        $endDateTime = new DateTime(Cleaner::sanitize(
-            'datetime',
-            $this->getRequest()->getParam('endDatetime')
-        ));
-
         $this->setCurrentProjectId();
 
         $values = array(
@@ -235,8 +224,14 @@ class Calendar_IndexController extends IndexController
             'place' => $this->getRequest()->getParam('place'),
             'notes' => $this->getRequest()->getParam('notes'),
             'rrule' => $this->getRequest()->getParam('rrule', ''),
-            'startDatetime' => new DateTime($start),
-            'endDatetime' => new DateTime($end),
+            'startDatetime' => new DateTime(Cleaner::sanitize(
+                'datetime',
+                $this->getRequest()->getParam('startDatetime')
+            )),
+            'endDatetime' => new DateTime(Cleaner::sanitize(
+                'datetime',
+                $this->getRequest()->getParam('endDatetime')
+            )),
             'status' => $this->getRequest()->getParam('status'),
             'visibility' => $this->getRequest()->getParam('visibility'),
         );
@@ -248,6 +243,7 @@ class Calendar_IndexController extends IndexController
             $values
         );
 
+        $message = Phprojekt::getInstance()->translate(self::ADD_TRUE_TEXT);
         $return = array('type'    => 'success',
                         'message' => $message,
                         'code'    => 0,
