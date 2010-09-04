@@ -107,6 +107,73 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
     }
 
     /**
+     * Update an existing event.
+     *
+     * @param int          $id                   The id of the event to update.
+     * @param array of int $participants         The IDs of the participants.
+     * @param bool         $multipleEvents       If all events described by this
+     *                                           event's rrule will be changed.
+     * @param bool         $multipleParticipants If the event should be updated
+     *                                           for all Participants.
+     * @param array        $values               The new values.
+     *
+     * @return void
+     */
+    public static function updateEvent($id, $participants, $multipleEvents,
+            $multipleParticipants, $values)
+    {
+        // What if the recurrence rule is changed?
+        // What if participants are added or removed?
+
+        // We need to find out which objects to update.
+        // For that, we first need the one the user clicked.
+        $model = new Calendar_Models_Calendar();
+        $model->find($id);
+
+        if (!$multipleEvents && !$multipleParticipants) {
+            // It's just the one we already got
+            $models = array($model);
+        } else {
+            // We need to make a second query with some WHERE clauses
+            // This makes us get the parent and all sibling events.
+            // (I.e. all events in this rrule and for all participants.)
+            if (empty($model->parentId)) {
+                $where = "(id = $model->id OR parent_id = $model->id)";
+            } else {
+                $where = "(id = $model->parentId OR "
+                    . "parent_id = $model->parentId)";
+            }
+
+            if (!$multipleEvents) {
+                // We only want the one on this exact date.
+                $where .= " AND start_datetime = '$model->startDatetime'";
+            }
+
+            if (!$multipleParticipants) {
+                // We only want the ones for this participant.
+                $where .= "AND participant_id = $model->participantId";
+            }
+            Phprojekt::getInstance()->getLog()->debug($where);
+            $models = $model->fetchAll($where);
+        }
+        foreach ($models as $m) {
+            Phprojekt::getInstance()->getLog()->debug($m->id);
+        }
+
+        // Now we can update them all.
+        foreach ($models as $model) {
+            $model->title         = $values['title'];
+            $model->place         = $values['place'];
+            $model->notes         = $values['notes'];
+            $model->startDatetime = $values['startDatetime']->format('Y-m-d H:m:s');
+            $model->endDatetime   = $values['endDatetime']->format('Y-m-d H:m:s');
+            $model->status        = $values['status'];
+            $model->visibility    = $values['visibility'];
+            $model->save();
+        }
+    }
+
+    /**
      * Add a new event.
      *
      * @param arary of int $participants The other participants of this event.
@@ -138,8 +205,6 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
             );
             $dateCollection->applyRrule($rrule);
             $dates = $dateCollection->getValues();
-            Phprojekt::getInstance()->getLog()->debug(print_r($dates, true));
-
             // Remove the first one, we already created it.
             array_shift($dates);
 

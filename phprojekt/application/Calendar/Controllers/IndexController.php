@@ -239,15 +239,43 @@ class Calendar_IndexController extends IndexController
             'visibility' => $this->getRequest()->getParam('visibility'),
         );
 
+        $id = (int) $this->getRequest()->getParam('id');
         $participants = (array) $this->getRequest()->getParam(
             'dataParticipant',
             array()
         );
 
-        // Create a new event
-        $id = Calendar_Models_Calendar::newEvent($participants, $values);
+        if (empty($id)) {
+            // Create a new event
+            $id = Calendar_Models_Calendar::newEvent($participants, $values);
+            $message = Phprojekt::getInstance()->translate(self::ADD_TRUE_TEXT);
+        } else {
+            // update the given event
+            $multipleEvents = Cleaner::sanitize(
+                    'boolean',
+                    $this->getRequest()->getParam('multipleEvents')
+            );
+            $multipleParticipants = Cleaner::sanitize(
+                    'boolean',
+                    $this->getRequest()->getParam('multipleParticipants')
+            );
 
-        $message = Phprojekt::getInstance()->translate(self::ADD_TRUE_TEXT);
+            Calendar_Models_Calendar::updateEvent(
+                $id,
+                $participants,
+                $multipleEvents,
+                $multipleParticipants,
+                $values
+            );
+
+            if ($multipleEvents || $multipleParticipants) {
+                $message = self::EDIT_TRUE_TEXT;
+            } else {
+                $message = self::EDIT_MULTIPLE_TRUE_TEXT;
+            }
+            $message = Phprojekt::getInstance()->translate($message);
+        }
+
         $return = array('type'    => 'success',
                         'message' => $message,
                         'code'    => 0,
