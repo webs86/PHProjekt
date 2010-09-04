@@ -122,8 +122,8 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
     public static function updateEvent($id, $participants, $multipleEvents,
             $multipleParticipants, $values)
     {
-        // What if the recurrence rule is changed?
-        // What if participants are added or removed?
+        //TODO: What if the recurrence rule is changed?
+        //TODO: What if participants are added or removed?
 
         // We need to find out which objects to update.
         // For that, we first need the one the user clicked.
@@ -162,11 +162,15 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
 
         // Now we can update them all.
         foreach ($models as $model) {
+            //TODO: Set status to pending for other people if there was a change
             $model->title         = $values['title'];
             $model->place         = $values['place'];
             $model->notes         = $values['notes'];
-            $model->startDatetime = $values['startDatetime']->format('Y-m-d H:m:s');
-            $model->endDatetime   = $values['endDatetime']->format('Y-m-d H:m:s');
+            //XXX: This doesn't even work a bit.
+            //     We have to calculate a difference in order to apply the
+            //     new times.
+            //$model->startDatetime = $values['startDatetime']->format('Y-m-d H:m:s');
+            //$model->endDatetime   = $values['endDatetime']->format('Y-m-d H:m:s');
             $model->status        = $values['status'];
             $model->visibility    = $values['visibility'];
             $model->save();
