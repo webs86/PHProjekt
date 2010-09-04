@@ -218,10 +218,15 @@ class Calendar_IndexController extends IndexController
     public function jsonSaveAction()
     {
         $message       = Phprojekt::getInstance()->translate(self::ADD_TRUE_TEXT);
-        $start = Cleaner::sanitize('datetime', $this->getRequest()->getParam('startDatetime'));
-        $end   =  Cleaner::sanitize('datetime', $this->getRequest()->getParam('endDatetime'));
-        $startDateTime = new DateTime($start);
-        $endDateTime   = new DateTime($end);
+
+        $startDateTime = new DateTime(Cleaner::sanitize(
+            'datetime',
+            $this->getRequest()->getParam('startDatetime')
+        ));
+        $endDateTime = new DateTime(Cleaner::sanitize(
+            'datetime',
+            $this->getRequest()->getParam('endDatetime')
+        ));
 
         $this->setCurrentProjectId();
 
@@ -236,7 +241,7 @@ class Calendar_IndexController extends IndexController
             'visibility' => $this->getRequest()->getParam('visibility'),
         );
 
-        $id = Calendar_Models_Calendar::__saveEvent(
+        $id = Calendar_Models_Calendar::saveEvent(
             (int) $this->getRequest()->getParam('id'),
             $values['rrule'],
             (array) $this->getRequest()->getParam('dataParticipant', array()),
@@ -247,43 +252,6 @@ class Calendar_IndexController extends IndexController
                         'message' => $message,
                         'code'    => 0,
                         'id'      => $id);
-/* Original method */
-//        $message       = Phprojekt::getInstance()->translate(self::ADD_TRUE_TEXT);
-//        $id            = (int) $this->getRequest()->getParam('id');
-//        $startDatetime = Cleaner::sanitize('datetime', $this->getRequest()->getParam('startDatetime',
-//            date("Y-m-d H:i:s")));
-//        $endDatetime = Cleaner::sanitize('datetime', $this->getRequest()->getParam('endDatetime',
-//            date("Y-m-d H:i:s")));
-//        $rrule                = (string) $this->getRequest()->getParam('rrule', null);
-//        $participants         = (array) $this->getRequest()->getParam('dataParticipant');
-//        $multipleEvents       = Cleaner::sanitize('boolean', $this->getRequest()->getParam('multipleEvents'));
-//        $multipleParticipants = Cleaner::sanitize('boolean', $this->getRequest()->getParam('multipleParticipants'));
-//        $modification         = false;
-//        $startDate            = date('Y-m-d', strtotime($startDatetime));
-//        $endDate              = date('Y-m-d', strtotime($endDatetime));
-//
-//        $this->getRequest()->setParam('startDate', $startDate);
-//        $this->getRequest()->setParam('startTime', date('H:i:s', strtotime($startDatetime)));
-//        $this->getRequest()->setParam('endDate', $endDate);
-//        $this->getRequest()->setParam('endTime', date('H:i:s', strtotime($endDatetime)));
-//        $this->getRequest()->setParam('startDatetime', $startDatetime);
-//        $this->getRequest()->setParam('endDatetime', $endDatetime);
-//        $this->setCurrentProjectId();
-//
-//        if (!empty($id)) {
-//            $message      = Phprojekt::getInstance()->translate(self::EDIT_TRUE_TEXT);
-//            $modification = true;
-//        }
-//
-//        $model   = $this->getModelObject();
-//        $request = $this->getRequest()->getParams();
-//        $id      = $model->saveEvent($request, $id, $startDate, $endDate, $rrule, $participants, $multipleEvents,
-//            $multipleParticipants);
-//
-//        $return = array('type'    => 'success',
-//                        'message' => $message,
-//                        'code'    => 0,
-//                        'id'      => $id);
 
         Phprojekt_Converter_Json::echoConvert($return);
     }

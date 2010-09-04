@@ -106,34 +106,48 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
 
     /**
      * Add or update an event.
+     *
+     * @param int          $id           ID of the event or null for a new one.
+     * @param string       $rrule        The recurrence rule for this event.
+     * @param arary of int $participants The other participants of this event.
+     * @param array        $values       Other values for this event.
+     *
+     * @return int The id of saved event.
      */
-    public static function __saveEvent($id, $rrule, $participants, $values)
+    public static function saveEvent($id, $rrule, $participants, $values)
     {
         if (empty($id)) {
-            return self::___newEvent($rrule, $participants, $values);
+            return self::_newEvent($rrule, $participants, $values);
         } else {
             throw new Exception('Not implemented yet');
         }
     }
 
-    protected static function ___newEvent($rrule, $participants, $values)
+    /**
+     * Add a new event.
+     *
+     * The event can have a recurrence rule and multiple participants.
+     */
+    protected static function _newEvent($rrule, $participants, $values)
     {
         $values['projectId'] = 1;
         $values['parentId']  = null;
-        $values['parentId']  = self::___newSingleEventForSingleParticipant(
+        $values['parentId']  = self::_newSingleEvent(
             Phprojekt_Auth::getUserId(),
             $values
         );
 
         if (!empty($rrule)) {
-            // Assign the other participants to the first event
+            // Assign the other participants to the first event, too
             foreach ($participants as $participant) {
-                self::___newSingleEventForSingleParticipant($participant, $values);
+                self::_newSingleEvent($participant, $values);
             }
             array_unshift($participants, Phprojekt_Auth::getUserId());
 
             // Get the remaining dates
-            $dateCollection = new Phprojekt_Date_Collection($values['startDatetime']);
+            $dateCollection = new Phprojekt_Date_Collection(
+                $values['startDatetime']
+            );
             $dateCollection->applyRrule($rrule);
             $dates = $dateCollection->getValues();
             var_dump($dates);
@@ -146,23 +160,24 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
                 $values['startDatetime'] = new Datetime('@' . $start);
                 $values['endDatetime']   = new Datetime('@' . $start);
                 $values['endDatetime']->add($duration);
-                self::___newSingleEvent($participants, $values);
+                foreach ($participants as $participant) {
+                    self::_newSingleEvent($participant, $values);
+                }
             }
         }
 
         return $values['parentId'];
     }
 
-    protected static function ___newSingleEvent($participants, $values)
-    {
-        foreach ($participants as $participant) {
-            self::___newSingleEventForSingleParticipant($participant, $values);
-        }
-
-        return $parentId;
-    }
-
-    protected static function ___newSingleEventForSingleParticipant(
+    /**
+     * Add a new single event (without recurrence) for a single participant.
+     *
+     * @param int   $participantId The ID of the participant.
+     * @param array $values        The other values to be inserted.
+     *
+     * @return int The ID of the newly created event.
+     */
+    protected static function _newSingleEvent(
             $participantId, $values)
     {
         $model = new Calendar_Models_Calendar();
@@ -180,6 +195,7 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
         $model->participantId = $participantId;
 
         $rights = array(Phprojekt_Auth::getUserId() => Phprojekt_Acl::ALL);
+
         if (Phprojekt_Auth::getUserId() !== $participantId) {
             // Set the status to pending and add rights for the participant
             $model->status = self::EVENT_STATUS_PENDING;
@@ -203,102 +219,6 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
         return $model->id;
     }
 
-    /**
-     * Save or inserts an event. It inserts one envent by participant.
-     *
-     * @param array   $request              Array with all the data for the item (Basic Data).
-     * @param integer $id                   Current item id or null for new one.
-     * @param string  $startDate            Date of the event.
-     * @param string  $rrule                Rule for apply the recurring.
-     * @param array   $participants         Array with the users involved in the event.
-     * @param boolean $multipleEvents       Apply changes to one event or all the recurring events.
-     * @param boolean $multipleParticipants Action for multiple participants or just the logged one.
-     *
-     * @return integer The id of the root event.
-     */
-    public function saveEvent($request, $id, $startDate, $endDate, $rrule, $participants, $multipleEvents,
-        $multipleParticipants)
-    {
-        $userId           = Phprojekt_Auth::getUserId();
-        $participantsList = array();
-        $daysDuration     = (strtotime($endDate) - strtotime($startDate)) / (24*60*60);
-        $parentId         = null;
-
-        // Getting requested dates for the serial meeting (if it is serial)
-        if (!empty($rrule)) {
-            if (!$this->_validateRecurrence($rrule)) {
-                $errors = $this->getError();
-                $error  = array_pop($errors);
-                throw new Phprojekt_PublishedException($error['label'] . ': ' . $error['message']);
-            }
-            if ($multipleEvents) {
-                $model = clone($this);
-                $model->find($id);
-                // If the startDate has changed, apply that difference of days to all the events of recurrence
-                if ($startDate != $this->getDate($model->startDatetime)) {
-                    $diffSeconds    = strtotime($startDate) - strtotime($this->getDate($model->startDatetime));
-                    $startDateTemp  = $this->getRecursionStartDate($id, $startDate);
-                    $startDateTemp  = strtotime($startDate) + $diffSeconds;
-                    $startDate      = date("Y-m-d", $startDateTemp);
-                } else {
-                    $startDate = $this->getRecursionStartDate($id, $startDate);
-                }
-            }
-            $dateCollection = new Phprojekt_Date_Collection($startDate);
-            $dateCollection->applyRrule($rrule);
-            $eventDates = $dateCollection->getValues();
-        } else {
-            $eventDates = array(strtotime($startDate));
-        }
-
-        // We will put the owner id first, just to make it clear
-        if (!in_array($userId, $participants)) {
-            $participantsList[$userId] = $userId;
-        }
-        foreach ($participants as $oneParticipant) {
-            $participantsList[(int) $oneParticipant] = (int) $oneParticipant;
-        }
-        if ($id == 0) {
-            $sendNotification = false;
-            if (array_key_exists('sendNotification', $request)) {
-                if ($request['sendNotification'] == 1) {
-                    $sendNotification            = true;
-                    $request['sendNotification'] = 0;
-                }
-            }
-
-            // New Event
-            $totalParticipants = count($participantsList);
-            $participantNumber = 0;
-            foreach ($participantsList as $participantId) {
-                $participantNumber ++;
-
-                // Last participant?
-                if ($participantNumber == $totalParticipants) {
-                    $lastParticipant = true;
-                } else {
-                    $lastParticipant = false;
-                }
-
-                $parentId = $this->_saveNewEvent($request, $eventDates, $daysDuration, $participantId, $lastParticipant,
-                    $sendNotification, $participantsList, $parentId);
-                if ($id == 0) {
-                    $id = $parentId;
-                }
-            }
-        } else {
-            // Edit Multiple Events
-            if ($multipleEvents) {
-                $this->_updateMultipleEvents($request, $id, $eventDates, $daysDuration, $participantsList,
-                    $multipleParticipants);
-            } else {
-                $this->_updateSingleEvent($request, $id, $eventDates, $daysDuration, $participantsList,
-                    $multipleParticipants);
-            }
-        }
-
-        return $id;
-    }
 
     /**
      * Returns the id of the root event of the current record.
