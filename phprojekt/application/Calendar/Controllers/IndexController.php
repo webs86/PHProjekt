@@ -221,6 +221,7 @@ class Calendar_IndexController extends IndexController
     {
         $this->setCurrentProjectId();
 
+        // Prepare the values to insert
         $values = array(
             'title' => $this->getRequest()->getParam('title'),
             'place' => $this->getRequest()->getParam('place'),
@@ -238,12 +239,13 @@ class Calendar_IndexController extends IndexController
             'visibility' => $this->getRequest()->getParam('visibility'),
         );
 
-        $id = Calendar_Models_Calendar::saveEvent(
-            (int) $this->getRequest()->getParam('id'),
-            $values['rrule'],
-            (array) $this->getRequest()->getParam('dataParticipant', array()),
-            $values
+        $participants = (array) $this->getRequest()->getParam(
+            'dataParticipant',
+            array()
         );
+
+        // Create a new event
+        $id = Calendar_Models_Calendar::newEvent($participants, $values);
 
         $message = Phprojekt::getInstance()->translate(self::ADD_TRUE_TEXT);
         $return = array('type'    => 'success',

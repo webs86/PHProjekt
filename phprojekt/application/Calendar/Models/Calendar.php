@@ -107,30 +107,14 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
     }
 
     /**
-     * Add or update an event.
+     * Add a new event.
      *
-     * @param int          $id           ID of the event or null for a new one.
-     * @param string       $rrule        The recurrence rule for this event.
      * @param arary of int $participants The other participants of this event.
      * @param array        $values       Other values for this event.
      *
      * @return int The id of saved event.
      */
-    public static function saveEvent($id, $rrule, $participants, $values)
-    {
-        if (empty($id)) {
-            return self::_newEvent($rrule, $participants, $values);
-        } else {
-            throw new Exception('Not implemented yet');
-        }
-    }
-
-    /**
-     * Add a new event.
-     *
-     * The event can have a recurrence rule and multiple participants.
-     */
-    protected static function _newEvent($rrule, $participants, $values)
+    public static function newEvent($participants, $values)
     {
         $values['projectId'] = 1;
         $values['parentId']  = null;
@@ -139,11 +123,13 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
             $values
         );
 
+        foreach ($participants as $participant) {
+            self::_newSingleEvent($participant, $values);
+        }
+
+        $rrule = $values['rrule'];
         if (!empty($rrule)) {
-            // Assign the other participants to the first event, too
-            foreach ($participants as $participant) {
-                self::_newSingleEvent($participant, $values);
-            }
+            // Add the owner to the participants
             array_unshift($participants, Phprojekt_Auth::getUserId());
 
             // Get the remaining dates
@@ -152,8 +138,9 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
             );
             $dateCollection->applyRrule($rrule);
             $dates = $dateCollection->getValues();
-            var_dump($dates);
-            return 0;
+            Phprojekt::getInstance()->getLog()->debug(print_r($dates, true));
+
+            // Remove the first one, we already created it.
             array_shift($dates);
 
             $duration = $values['startDatetime']->diff($values['endDatetime']);
@@ -220,7 +207,6 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
 
         return $model->id;
     }
-
 
     /**
      * Returns the id of the root event of the current record.
