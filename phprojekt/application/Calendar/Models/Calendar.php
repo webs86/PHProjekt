@@ -20,6 +20,7 @@
  * @since      File available since Release 6.0
  * @version    Release: @package_version@
  * @author     Eduardo Polidor <polidor@mayflower.de>
+ * @author     Simon Kohlmeyer <simon.kohlmeyer@mayflower.de>
  */
 
 /**
@@ -34,6 +35,7 @@
  * @since      File available since Release 6.0
  * @version    Release: @package_version@
  * @author     Eduardo Polidor <polidor@mayflower.de>
+ * @author     Simon Kohlmeyer <simon.kohlmeyer@mayflower.de>
  */
 class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
 {
