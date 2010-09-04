@@ -162,7 +162,6 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
 
         // Now we can update them all.
         foreach ($models as $model) {
-            //TODO: Set status to pending for other people if there was a change
             $model->title         = $values['title'];
             $model->place         = $values['place'];
             $model->notes         = $values['notes'];
@@ -171,7 +170,8 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
             //     new times.
             //$model->startDatetime = $values['startDatetime']->format('Y-m-d H:m:s');
             //$model->endDatetime   = $values['endDatetime']->format('Y-m-d H:m:s');
-            $model->status        = $values['status'];
+            //TODO: Set status to pending for other people if there was a change
+            //$model->status        = $values['status'];
             $model->visibility    = $values['visibility'];
             $model->save();
         }
