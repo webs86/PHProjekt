@@ -221,59 +221,54 @@ class Calendar_IndexController extends IndexController
     {
         $this->setCurrentProjectId();
 
-        // Prepare the values to insert
-        $values = array(
-            'title' => $this->getRequest()->getParam('title'),
-            'place' => $this->getRequest()->getParam('place'),
-            'notes' => $this->getRequest()->getParam('notes'),
-            'rrule' => $this->getRequest()->getParam('rrule', ''),
-            'startDatetime' => new DateTime(Cleaner::sanitize(
-                'datetime',
-                $this->getRequest()->getParam('startDatetime')
-            )),
-            'endDatetime' => new DateTime(Cleaner::sanitize(
-                'datetime',
-                $this->getRequest()->getParam('endDatetime')
-            )),
-            'status' => $this->getRequest()->getParam('status'),
-            'visibility' => $this->getRequest()->getParam('visibility'),
+        $request = $this->getRequest()->getParams();
+        $id = (int) $request['id'];
+        $participants = (array) $request['dataParticipant'];
+        $start = new Datetime(
+            Cleaner::sanitize('datetime', $request['startDatetime'])
         );
-
-        $id = (int) $this->getRequest()->getParam('id');
-        $participants = (array) $this->getRequest()->getParam(
-            'dataParticipant',
-            array()
+        $end   = new Datetime(
+            Cleaner::sanitize('datetime', $request['endDatetime'])
         );
+        $rrule                = array_key_exists('rrule', $request)
+                                ? $request['rrule']
+                                : null;
 
-        if (empty($id)) {
+        if(!empty($id)) {
+            // This is handled seperately because the creation of new events has
+            // been refactored
+            $multipleEvents       = Cleaner::sanitize('boolean', $request['multipleEvents']);
+            $multipleParticipants = Cleaner::sanitize('boolean', $request['multipleParticipants']);
+
+            $request['startDatetime'] = $start->format('Y-m-d H:i:s');
+            $request['startDate']     = $start->format('Y-m-d');
+            $request['startTime']     = $start->format('H:i:s');
+            $request['endDatetime']   = $end->format('Y-m-d H:i:s');
+            $request['endDate']       = $end->format('Y-m-d');
+            $request['endTime']       = $end->format('H:i:s');
+
+            $message = Phprojekt::getInstance()->translate(self::EDIT_TRUE_TEXT);
+
+            $model = new Calendar_Models_Calendar();
+            $id = $model->updateEvent($request, $id, $request['startDate'],
+                $request['endDate'], $rrule, $participants, $multipleEvents,
+                $multipleParticipants);
+        } else {
+            // Prepare the values to insert
+            $values = array(
+                'title'         => $request['title'],
+                'place'         => $request['place'],
+                'notes'         => $request['notes'],
+                'rrule'         => $rrule,
+                'status'        => $request['status'],
+                'visibility'    => $request['visibility'],
+                'startDatetime' => $start,
+                'endDatetime'   => $end
+            );
+
             // Create a new event
             $id = Calendar_Models_Calendar::newEvent($participants, $values);
             $message = Phprojekt::getInstance()->translate(self::ADD_TRUE_TEXT);
-        } else {
-            // update the given event
-            $multipleEvents = Cleaner::sanitize(
-                    'boolean',
-                    $this->getRequest()->getParam('multipleEvents')
-            );
-            $multipleParticipants = Cleaner::sanitize(
-                    'boolean',
-                    $this->getRequest()->getParam('multipleParticipants')
-            );
-
-            Calendar_Models_Calendar::updateEvent(
-                $id,
-                $participants,
-                $multipleEvents,
-                $multipleParticipants,
-                $values
-            );
-
-            if ($multipleEvents || $multipleParticipants) {
-                $message = self::EDIT_TRUE_TEXT;
-            } else {
-                $message = self::EDIT_MULTIPLE_TRUE_TEXT;
-            }
-            $message = Phprojekt::getInstance()->translate($message);
         }
 
         $return = array('type'    => 'success',

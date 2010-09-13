@@ -107,74 +107,70 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
     }
 
     /**
-     * Update an existing event.
+     * Save or inserts an event. It inserts one envent by participant.
      *
-     * @param int          $id                   The id of the event to update.
-     * @param array of int $participants         The IDs of the participants.
-     * @param bool         $multipleEvents       If all events described by this
-     *                                           event's rrule will be changed.
-     * @param bool         $multipleParticipants If the event should be updated
-     *                                           for all Participants.
-     * @param array        $values               The new values.
+     * @param array   $request              Array with all the data for the item (Basic Data).
+     * @param integer $id                   Current item id or null for new one.
+     * @param string  $startDate            Date of the event.
+     * @param string  $rrule                Rule for apply the recurring.
+     * @param array   $participants         Array with the users involved in the event.
+     * @param boolean $multipleEvents       Apply changes to one event or all the recurring events.
+     * @param boolean $multipleParticipants Action for multiple participants or just the logged one.
      *
-     * @return void
+     * @return integer The id of the root event.
      */
-    public static function updateEvent($id, $participants, $multipleEvents,
-            $multipleParticipants, $values)
+    public function updateEvent($request, $id, $startDate, $endDate, $rrule, $participants, $multipleEvents,
+        $multipleParticipants)
     {
-        //TODO: What if the recurrence rule is changed?
-        //TODO: What if participants are added or removed?
+        $userId           = Phprojekt_Auth::getUserId();
+        $participantsList = array();
+        $daysDuration     = (strtotime($endDate) - strtotime($startDate)) / (24*60*60);
+        $parentId         = null;
 
-        // We need to find out which objects to update.
-        // For that, we first need the one the user clicked.
-        $model = new Calendar_Models_Calendar();
-        $model->find($id);
-
-        if (!$multipleEvents && !$multipleParticipants) {
-            // It's just the one we already got
-            $models = array($model);
+        // Getting requested dates for the serial meeting (if it is serial)
+        if (!empty($rrule)) {
+            if (!$this->_validateRecurrence($rrule)) {
+                $errors = $this->getError();
+                $error  = array_pop($errors);
+                throw new Phprojekt_PublishedException($error['label'] . ': ' . $error['message']);
+            }
+            if ($multipleEvents) {
+                $model = clone($this);
+                $model->find($id);
+                // If the startDate has changed, apply that difference of days to all the events of recurrence
+                if ($startDate != $this->getDate($model->startDatetime)) {
+                    $diffSeconds    = strtotime($startDate) - strtotime($this->getDate($model->startDatetime));
+                    $startDateTemp  = $this->getRecursionStartDate($id, $startDate);
+                    $startDateTemp  = strtotime($startDate) + $diffSeconds;
+                    $startDate      = date("Y-m-d", $startDateTemp);
+                } else {
+                    $startDate = $this->getRecursionStartDate($id, $startDate);
+                }
+            }
+            $dateCollection = new Phprojekt_Date_Collection($startDate);
+            $dateCollection->applyRrule($rrule);
+            $eventDates = $dateCollection->getValues();
         } else {
-            // We need to make a second query with some WHERE clauses
-            // This makes us get the parent and all sibling events.
-            // (I.e. all events in this rrule and for all participants.)
-            if (empty($model->parentId)) {
-                $where = "(id = $model->id OR parent_id = $model->id)";
-            } else {
-                $where = "(id = $model->parentId OR "
-                    . "parent_id = $model->parentId)";
-            }
-
-            if (!$multipleEvents) {
-                // We only want the one on this exact date.
-                $where .= " AND start_datetime = '$model->startDatetime'";
-            }
-
-            if (!$multipleParticipants) {
-                // We only want the ones for this participant.
-                $where .= "AND participant_id = $model->participantId";
-            }
-            Phprojekt::getInstance()->getLog()->debug($where);
-            $models = $model->fetchAll($where);
-        }
-        foreach ($models as $m) {
-            Phprojekt::getInstance()->getLog()->debug($m->id);
+            $eventDates = array(strtotime($startDate));
         }
 
-        // Now we can update them all.
-        foreach ($models as $model) {
-            $model->title         = $values['title'];
-            $model->place         = $values['place'];
-            $model->notes         = $values['notes'];
-            //XXX: This doesn't even work a bit.
-            //     We have to calculate a difference in order to apply the
-            //     new times.
-            //$model->startDatetime = $values['startDatetime']->format('Y-m-d H:m:s');
-            //$model->endDatetime   = $values['endDatetime']->format('Y-m-d H:m:s');
-            //TODO: Set status to pending for other people if there was a change
-            //$model->status        = $values['status'];
-            $model->visibility    = $values['visibility'];
-            $model->save();
+        // We will put the owner id first, just to make it clear
+        if (!in_array($userId, $participants)) {
+            $participantsList[$userId] = $userId;
         }
+        foreach ($participants as $oneParticipant) {
+            $participantsList[(int) $oneParticipant] = (int) $oneParticipant;
+        }
+
+        if ($multipleEvents) {
+            $this->_updateMultipleEvents($request, $id, $eventDates, $daysDuration, $participantsList,
+                $multipleParticipants);
+        } else {
+            $this->_updateSingleEvent($request, $id, $eventDates, $daysDuration, $participantsList,
+                $multipleParticipants);
+        }
+
+        return $id;
     }
 
     /**
@@ -746,29 +742,18 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
      *
      * @return integer The parentId.
      */
-    private function _saveEvent($request, $model, $startDatetime, $endDatetime, $participantId, $parentId)
+    private function _saveEvent($request, $model, $oneDate, $daysDuration, $participantId, $parentId)
     {
-        $values = array(
-            'id'             => $request['id'],
-            'parentId'       => $parentId,
-            'ownerId'        => $request['ownerId'],
-            'title'          => $request['title'],
-            'place'          => $request['place'],
-            'notes'          => $request['notes'],
-            'startDatetime'  => '2010-10-10 10:10:10', //$startDatetime->format('Y-m-d H:i:s'),
-            'endDatetime'    => '2010-10-10 10:10:13', //$endDatetime->format('Y-m-d H:i:s'),
-            'status'         => $request['status'],
-            'rrule'          => $request['rrule'],
-            'visibility'     => $request['visibility'],
-            'participantId'  => $participantId
-        );
-        Phprojekt::getInstance()->getLog()->debug(print_r($values, true));
-        Phprojekt::getInstance()->getLog()->debug(print_r($model, true));
+        $request['startDatetime'] = date("Y-m-d", $oneDate) . ' ' . $request['startTime'];
+        $request['endDatetime']   = date("Y-m-d", $oneDate + ($daysDuration * 24 * 60 * 60)) . ' '
+            . $request['endTime'];
+        $request['participantId'] = $participantId;
+        $request['parentId']      = $parentId;
 
         // The save is needed?
-        if ($this->_needSave($model, $values)) {
+        if ($this->_needSave($model, $request)) {
             // Add 'read, write, downlaod and delete' access to the participant
-            $values = Default_Helpers_Right::allowReadWriteDownloadDelete($values, $participantId);
+            $request = Default_Helpers_Right::allowReadWriteDownloadDelete($request, $participantId);
 
             // Access for the owner
             if (null !== $model->ownerId) {
@@ -779,12 +764,12 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
 
             // Set the status to "Pending" if there is any change and the event is for other user
             if ($participantId != $ownerId && $participantId != Phprojekt_Auth::getUserId()) {
-                $values['status'] = self::EVENT_STATUS_PENDING;
+                $request['status'] = self::EVENT_STATUS_PENDING;
             }
 
-            $values = Default_Helpers_Right::allowAll($values, $ownerId);
+            $request = Default_Helpers_Right::allowAll($request, $ownerId);
 
-            Default_Helpers_Save::save($model, $values);
+            Default_Helpers_Save::save($model, $request);
         }
 
         if (null === $parentId) {
