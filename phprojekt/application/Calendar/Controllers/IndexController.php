@@ -267,7 +267,11 @@ class Calendar_IndexController extends IndexController
             );
 
             // Create a new event
-            $id = Calendar_Models_Calendar::newEvent($participants, $values);
+            $id = Calendar_Models_Calendar::newEvent(
+                $participants,
+                $values,
+                $request['sendNotification']
+            );
             $message = Phprojekt::getInstance()->translate(self::ADD_TRUE_TEXT);
         }
 

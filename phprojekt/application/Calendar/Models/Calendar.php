@@ -176,12 +176,13 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
     /**
      * Add a new event.
      *
-     * @param arary of int $participants The other participants of this event.
-     * @param array        $values       Other values for this event.
+     * @param arary of int $participants      The other participants.
+     * @param array        $values            Other values for this event.
+     * @param boolean      $sendNotifications Should we send notification mails?
      *
      * @return int The id of saved event.
      */
-    public static function newEvent($participants, $values)
+    public static function newEvent($participants, $values, $sendNotifications)
     {
         $values['projectId'] = 1;
         $values['parentId']  = null;
@@ -193,12 +194,11 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
         foreach ($participants as $participant) {
             self::_newSingleEvent($participant, $values);
         }
+        // From now on, we can handle the owner as a regular participant.
+        array_unshift($participants, Phprojekt_Auth::getUserId());
 
         $rrule = $values['rrule'];
         if (!empty($rrule)) {
-            // Add the owner to the participants
-            array_unshift($participants, Phprojekt_Auth::getUserId());
-
             // Get the remaining dates
             $dateCollection = new Phprojekt_Date_Collection(
                 $values['startDatetime']
@@ -218,6 +218,19 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
                     self::_newSingleEvent($participant, $values);
                 }
             }
+        }
+
+        if ($sendNotifications) {
+            $model = new Calendar_Models_Calendar();
+            $model->find($values['parentId']);
+            $model->notifParticipants = $participants;
+            $start = new Datetime($model->startDatetime);
+            $end = new Datetime($model->endDatetime);
+            $model->startDateNotif = $start->format('Y-m-d');
+            $model->endDateNotif = $end->format('Y-m-d');
+            $model->getNotification()->send(
+                Phprojekt_Notification::TRANSPORT_MAIL_TEXT
+            );
         }
 
         return $values['parentId'];
