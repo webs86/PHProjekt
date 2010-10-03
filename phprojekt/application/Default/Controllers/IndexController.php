@@ -42,7 +42,7 @@
  * @version    Release: @package_version@
  * @author     David Soria Parra <soria_parra@mayflower.de>
  */
-class IndexController extends Zend_Controller_Action
+class IndexController extends FileController
 {
     /**
      * String to use on success in the action save for new items.

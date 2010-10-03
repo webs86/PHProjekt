@@ -37,7 +37,7 @@
  * @version    Release: @package_version@
  * @author     Gustavo Solt <solt@mayflower.de>
  */
-class FileController extends IndexController
+class FileController extends Phprojekt_Module_Action
 {
     /**
      * The function sets up the template upload.phtml and renders it.
@@ -268,7 +268,7 @@ class FileController extends IndexController
         $sessionName   = 'Phprojekt_CsrfToken';
         $csrfNamespace = new Zend_Session_Namespace($sessionName);
         $config        = Phprojekt::getInstance()->getConfig();
-        $linkBegin     = $config->webpath . 'index.php/' . $this->getModuleName() . '/index/';
+        $linkBegin     = $config->webpath . 'index.php/' . $this->getRequest()->getModuleName() . '/index/';
 
         // Add all the extra parameters that have the original URL
         $linkData      = '';
@@ -354,7 +354,7 @@ class FileController extends IndexController
 
             // Log error
             Phprojekt::getInstance()->getLog()->err("Error: wrong 'field' parameter trying to Download or Delete a file"
-                . ". User Id: " . Phprojekt_Auth::getUserId() . " - Module: " . $this->getModuleName());
+                . ". User Id: " . Phprojekt_Auth::getUserId() . " - Module: " . $this->getRequest()->getModuleName());
             // Show error to user and stop script execution
             die($error);
         }
@@ -377,7 +377,7 @@ class FileController extends IndexController
 
             // Log error
             Phprojekt::getInstance()->getLog()->err("Error: wrong 'order' parameter trying to Download or Delete a file"
-                . ". User Id: " . Phprojekt_Auth::getUserId() . " - Module: " . $this->getModuleName());
+                . ". User Id: " . Phprojekt_Auth::getUserId() . " - Module: " . $this->getRequest()->getModuleName());
             // Show error to user and stop script execution
             die($error);
         }
@@ -403,7 +403,7 @@ class FileController extends IndexController
 
             // Log error
             Phprojekt::getInstance()->getLog()->err("Error: trying to Delete or Upload a file without write access. "
-                . "User Id: " . Phprojekt_Auth::getUserId() . " - Module: " . $this->getModuleName());
+                . "User Id: " . Phprojekt_Auth::getUserId() . " - Module: " . $this->getRequest()->getModuleName());
             // Show error to user and stop script execution
             die($error);
         }
