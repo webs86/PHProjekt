@@ -20,6 +20,7 @@
  * @since      File available since Release 6.0
  * @version    Release: @package_version@
  * @author     Eduardo Polidor <polidor@mayflower.de>
+ * @author     Simon Kohlmeyer <simon.kohlmeyer@mayflower.de>
  */
 
 /**
@@ -34,6 +35,7 @@
  * @since      File available since Release 6.0
  * @version    Release: @package_version@
  * @author     Eduardo Polidor <polidor@mayflower.de>
+ * @author     Simon Kohlmeyer <simon.kohlmeyer@mayflower.de>
  */
 class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
 {
@@ -117,7 +119,7 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
      *
      * @return integer The id of the root event.
      */
-    public function saveEvent($request, $id, $startDate, $endDate, $rrule, $participants, $multipleEvents,
+    public function updateEvent($request, $id, $startDate, $endDate, $rrule, $participants, $multipleEvents,
         $multipleParticipants)
     {
         $userId           = Phprojekt_Auth::getUserId();
@@ -159,46 +161,129 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
         foreach ($participants as $oneParticipant) {
             $participantsList[(int) $oneParticipant] = (int) $oneParticipant;
         }
-        if ($id == 0) {
-            $sendNotification = false;
-            if (array_key_exists('sendNotification', $request)) {
-                if ($request['sendNotification'] == 1) {
-                    $sendNotification            = true;
-                    $request['sendNotification'] = 0;
-                }
-            }
 
-            // New Event
-            $totalParticipants = count($participantsList);
-            $participantNumber = 0;
-            foreach ($participantsList as $participantId) {
-                $participantNumber ++;
-
-                // Last participant?
-                if ($participantNumber == $totalParticipants) {
-                    $lastParticipant = true;
-                } else {
-                    $lastParticipant = false;
-                }
-
-                $parentId = $this->_saveNewEvent($request, $eventDates, $daysDuration, $participantId, $lastParticipant,
-                    $sendNotification, $participantsList, $parentId);
-                if ($id == 0) {
-                    $id = $parentId;
-                }
-            }
+        if ($multipleEvents) {
+            $this->_updateMultipleEvents($request, $id, $eventDates, $daysDuration, $participantsList,
+                $multipleParticipants);
         } else {
-            // Edit Multiple Events
-            if ($multipleEvents) {
-                $this->_updateMultipleEvents($request, $id, $eventDates, $daysDuration, $participantsList,
-                    $multipleParticipants);
-            } else {
-                $this->_updateSingleEvent($request, $id, $eventDates, $daysDuration, $participantsList,
-                    $multipleParticipants);
-            }
+            $this->_updateSingleEvent($request, $id, $eventDates, $daysDuration, $participantsList,
+                $multipleParticipants);
         }
 
         return $id;
+    }
+
+    /**
+     * Add a new event.
+     *
+     * @param arary of int $participants      The other participants.
+     * @param array        $values            Other values for this event.
+     * @param boolean      $sendNotifications Should we send notification mails?
+     *
+     * @return int The id of saved event.
+     */
+    public static function newEvent($participants, $values, $sendNotifications)
+    {
+        $values['projectId'] = 1;
+        $values['parentId']  = null;
+        $values['parentId']  = self::_newSingleEvent(
+            Phprojekt_Auth::getUserId(),
+            $values
+        );
+
+        foreach ($participants as $participant) {
+            self::_newSingleEvent($participant, $values);
+        }
+        // From now on, we can handle the owner as a regular participant.
+        array_unshift($participants, Phprojekt_Auth::getUserId());
+
+        $rrule = $values['rrule'];
+        if (!empty($rrule)) {
+            // Get the remaining dates
+            $dateCollection = new Phprojekt_Date_Collection(
+                $values['startDatetime']
+            );
+            $dateCollection->applyRrule($rrule);
+            $dates = $dateCollection->getValues();
+            // Remove the first one, we already created it.
+            array_shift($dates);
+
+            $duration = $values['startDatetime']->diff($values['endDatetime']);
+            foreach ($dates as $start) {
+                // Create start and end Date
+                $values['startDatetime'] = new Datetime('@' . $start);
+                $values['endDatetime']   = new Datetime('@' . $start);
+                $values['endDatetime']->add($duration);
+                foreach ($participants as $participant) {
+                    self::_newSingleEvent($participant, $values);
+                }
+            }
+        }
+
+        if ($sendNotifications) {
+            $model = new Calendar_Models_Calendar();
+            $model->find($values['parentId']);
+            $model->notifParticipants = $participants;
+            $start = new Datetime($model->startDatetime);
+            $end = new Datetime($model->endDatetime);
+            $model->startDateNotif = $start->format('Y-m-d');
+            $model->endDateNotif = $end->format('Y-m-d');
+            $model->getNotification()->send(
+                Phprojekt_Notification::TRANSPORT_MAIL_TEXT
+            );
+        }
+
+        return $values['parentId'];
+    }
+
+    /**
+     * Add a new single event (without recurrence) for a single participant.
+     *
+     * @param int   $participantId The ID of the participant.
+     * @param array $values        The other values to be inserted.
+     *
+     * @return int The ID of the newly created event.
+     */
+    protected static function _newSingleEvent(
+            $participantId, $values)
+    {
+        $model = new Calendar_Models_Calendar();
+        $model->parentId      = $values['parentId'];
+        $model->projectId     = 1;
+        $model->ownerId       = Phprojekt_Auth::getUserId();
+        $model->title         = $values['title'];
+        $model->place         = $values['place'];
+        $model->notes         = $values['notes'];
+        $model->startDatetime = $values['startDatetime']->format('Y-m-d H:m:s');
+        $model->endDatetime   = $values['endDatetime']->format('Y-m-d H:m:s');
+        $model->status        = $values['status'];
+        $model->rrule         = $values['rrule'];
+        $model->visibility    = $values['visibility'];
+        $model->participantId = $participantId;
+
+        $rights = array(Phprojekt_Auth::getUserId() => Phprojekt_Acl::ALL);
+
+        if (Phprojekt_Auth::getUserId() !== $participantId) {
+            // Set the status to pending and add rights for the participant
+            $model->status = self::EVENT_STATUS_PENDING;
+            $rights[$participantId] = Phprojekt_Acl::convertArrayToBitmask(
+                    array(
+                        'read'     => true,
+                        'write'    => true,
+                        'download' => true,
+                        'delete'   => true,
+                        'access'   => false,
+                        'create'   => false,
+                        'copy'     => false,
+                        'admin'    => false
+                    )
+            );
+        }
+
+        $model->save();
+        $model->saveRights($rights);
+
+        return $model->id;
     }
 
     /**
@@ -715,11 +800,11 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
      *
      * @return boolean True if there is any change.
      */
-    private function _needSave($model, $request)
+    private function _needSave($model, $values)
     {
         $save = false;
 
-        foreach ($request as $k => $v) {
+        foreach ($values as $k => $v) {
             if (isset($model->$k)) {
                 if ($model->$k != $v && $k != 'id' && $k != 'rrule') {
                     $save = true;
@@ -738,7 +823,7 @@ class Calendar_Models_Calendar extends Phprojekt_Item_Abstract
      *
      * @return boolean True for a valid string.
      */
-    private function _validateRecurrence($rrule)
+    private static function _validateRecurrence($rrule)
     {
         $valid = true;
 

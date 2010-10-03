@@ -233,7 +233,7 @@ class Calendar_Models_Notification extends Phprojekt_Notification
         $bodyFields[] = array('label' => Phprojekt::getInstance()->translate('Participants', $lang),
                               'value' => $participantsValue);
 
-        if ($this->_model->rrule !== null) {
+        if (!empty($this->_model->rrule)) {
             $bodyFields = array_merge($bodyFields, $this->getRruleDescriptive($this->_model->rrule, $lang));
         }
 

@@ -73,14 +73,18 @@ class Phprojekt_Date_Collection
     /**
      * Create a new collection of dates.
      *
-     * @param string $minDate The lowsest allowed value.
+     * @param string|Datetime $minDate The lowest allowed value.
      *
      * @return void
      */
     public function __construct($minDate)
     {
         $this->_date    = new Zend_Date();
-        $this->_minDate = $this->_getDate(strtotime($minDate));
+        if (is_string($minDate)) {
+            $this->_minDate = $this->_getDate(strtotime($minDate));
+        } else {
+            $this->_minDate = $this->_getDate($minDate->getTimestamp());
+        }
     }
 
     /**

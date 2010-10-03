@@ -20,6 +20,7 @@
  * @since      File available since Release 6.0
  * @version    Release: @package_version@
  * @author     Eduardo Polidor <polidor@mayflower.de>
+ * @author     Simon Kohlmeyer <simon.kohlmeyer@mayflower.de>
  */
 
 /**
@@ -34,6 +35,7 @@
  * @since      File available since Release 6.0
  * @version    Release: @package_version@
  * @author     Eduardo Polidor <polidor@mayflower.de>
+ * @author     Simon Kohlmeyer <simon.kohlmeyer@mayflower.de>
  */
 class Calendar_IndexController extends IndexController
 {
@@ -217,37 +219,61 @@ class Calendar_IndexController extends IndexController
      */
     public function jsonSaveAction()
     {
-        $message       = Phprojekt::getInstance()->translate(self::ADD_TRUE_TEXT);
-        $id            = (int) $this->getRequest()->getParam('id');
-        $startDatetime = Cleaner::sanitize('datetime', $this->getRequest()->getParam('startDatetime',
-            date("Y-m-d H:i:s")));
-        $endDatetime = Cleaner::sanitize('datetime', $this->getRequest()->getParam('endDatetime',
-            date("Y-m-d H:i:s")));
-        $rrule                = (string) $this->getRequest()->getParam('rrule', null);
-        $participants         = (array) $this->getRequest()->getParam('dataParticipant');
-        $multipleEvents       = Cleaner::sanitize('boolean', $this->getRequest()->getParam('multipleEvents'));
-        $multipleParticipants = Cleaner::sanitize('boolean', $this->getRequest()->getParam('multipleParticipants'));
-        $modification         = false;
-        $startDate            = date('Y-m-d', strtotime($startDatetime));
-        $endDate              = date('Y-m-d', strtotime($endDatetime));
-
-        $this->getRequest()->setParam('startDate', $startDate);
-        $this->getRequest()->setParam('startTime', date('H:i:s', strtotime($startDatetime)));
-        $this->getRequest()->setParam('endDate', $endDate);
-        $this->getRequest()->setParam('endTime', date('H:i:s', strtotime($endDatetime)));
-        $this->getRequest()->setParam('startDatetime', $startDatetime);
-        $this->getRequest()->setParam('endDatetime', $endDatetime);
         $this->setCurrentProjectId();
 
-        if (!empty($id)) {
-            $message      = Phprojekt::getInstance()->translate(self::EDIT_TRUE_TEXT);
-            $modification = true;
-        }
-
-        $model   = $this->getModelObject();
         $request = $this->getRequest()->getParams();
-        $id      = $model->saveEvent($request, $id, $startDate, $endDate, $rrule, $participants, $multipleEvents,
-            $multipleParticipants);
+        $id = (int) $request['id'];
+        $participants = (array) $request['dataParticipant'];
+        $start = new Datetime(
+            Cleaner::sanitize('datetime', $request['startDatetime'])
+        );
+        $end   = new Datetime(
+            Cleaner::sanitize('datetime', $request['endDatetime'])
+        );
+        $rrule                = array_key_exists('rrule', $request)
+                                ? $request['rrule']
+                                : null;
+
+        if(!empty($id)) {
+            // This is handled seperately because the creation of new events has
+            // been refactored
+            $multipleEvents       = Cleaner::sanitize('boolean', $request['multipleEvents']);
+            $multipleParticipants = Cleaner::sanitize('boolean', $request['multipleParticipants']);
+
+            $request['startDatetime'] = $start->format('Y-m-d H:i:s');
+            $request['startDate']     = $start->format('Y-m-d');
+            $request['startTime']     = $start->format('H:i:s');
+            $request['endDatetime']   = $end->format('Y-m-d H:i:s');
+            $request['endDate']       = $end->format('Y-m-d');
+            $request['endTime']       = $end->format('H:i:s');
+
+            $message = Phprojekt::getInstance()->translate(self::EDIT_TRUE_TEXT);
+
+            $model = new Calendar_Models_Calendar();
+            $id = $model->updateEvent($request, $id, $request['startDate'],
+                $request['endDate'], $rrule, $participants, $multipleEvents,
+                $multipleParticipants);
+        } else {
+            // Prepare the values to insert
+            $values = array(
+                'title'         => $request['title'],
+                'place'         => $request['place'],
+                'notes'         => $request['notes'],
+                'rrule'         => $rrule,
+                'status'        => $request['status'],
+                'visibility'    => $request['visibility'],
+                'startDatetime' => $start,
+                'endDatetime'   => $end
+            );
+
+            // Create a new event
+            $id = Calendar_Models_Calendar::newEvent(
+                $participants,
+                $values,
+                $request['sendNotification']
+            );
+            $message = Phprojekt::getInstance()->translate(self::ADD_TRUE_TEXT);
+        }
 
         $return = array('type'    => 'success',
                         'message' => $message,
